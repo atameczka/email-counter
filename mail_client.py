@@ -45,18 +45,18 @@ class ImapMailClient:
         results = []
         for msg_id in message_ids:
             status, msg_data = self.connection.fetch(
-                msg_id, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])"
+                msg_id, "(BODY.PEEK[])"
             )
-            raw_header = msg_data[0][1]
-            message = email.message_from_bytes(raw_header)
+            raw_email = msg_data[0][1]
+            message = email.message_from_bytes(raw_email)
 
             results.append({"date": message.get("Date", ""),
                             "sender": _decode_email_header(message.get("From", "")),
                             "subject": _decode_email_header(message.get("Subject", "")),
+                            "body": _extract_body(message),
                             })
 
         return results
-
 
 def _decode_modified_utf7(value: str) -> str:
     def replace(match):
@@ -81,3 +81,21 @@ def _decode_email_header(value: str) -> str:
         else:
             result += part
     return result
+
+def _extract_body(message) -> str:
+    if message.is_multipart():
+        for part in message.walk():
+            content_type = part.get_content_type()
+            content_disposition = str(part.get("Content-Disposition", ""))
+
+            if content_type == "text/plain" and "attachment" not in content_disposition:
+                charset = part.get_content_charset() or "utf-8"
+                payload = part.get_payload(decode=True)
+                return payload.decode(charset, errors="ignore")
+        return ""
+    else:
+        charset = message.get_content_charset() or "utf-8"
+        payload = message.get_payload(decode=True)
+        if payload is None:
+            return ""
+        return payload.decode(charset, errors="ignore")
