@@ -45,7 +45,13 @@ extended without touching the core logic.
 git clone https://github.com/atameczka/email-counter.git
 ```
 
-2. Run the application:
+2. Install dependencies:
+
+```
+pip install -r requirements.txt
+```
+
+3. Run the application:
 
 ```
 python main.py
