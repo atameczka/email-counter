@@ -5,6 +5,7 @@ import re
 
 from datetime import datetime
 from email.header import decode_header
+from email.utils import parsedate_to_datetime
 
 class ImapMailClient:
     def __init__(self, host: str, port: int = 993):
@@ -50,12 +51,23 @@ class ImapMailClient:
             raw_email = msg_data[0][1]
             message = email.message_from_bytes(raw_email)
 
-            results.append({"date": message.get("Date", ""),
-                            "sender": _decode_email_header(message.get("From", "")),
-                            "subject": _decode_email_header(message.get("Subject", "")),
-                            "body": _extract_body(message),
-                            })
+            date_header = message.get("Date")
+            if date_header is None:
+                continue
 
+            try:
+                date = parsedate_to_datetime(date_header)
+            except ValueError:
+                continue
+
+            results.append({
+                "date": date,
+                "sender": _decode_email_header(message.get("From", "")),
+                "subject": _decode_email_header(message.get("Subject", "")),
+                "body": _extract_body(message),
+            })
+
+        results.sort(key=lambda e: e["date"], reverse=True)
         return results
 
 def _decode_modified_utf7(value: str) -> str:
