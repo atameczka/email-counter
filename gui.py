@@ -162,9 +162,3 @@ class EmailCounterApp:
 
         export_to_csv(self.emails, filepath)
         self.result_label.config(text=f"Exported {len(self.emails)} emails to {filepath}")
-
-
-if __name__ == "__main__":
-    window = tk.Tk()
-    app = EmailCounterApp(window)
-    window.mainloop()
