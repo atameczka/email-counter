@@ -1,10 +1,18 @@
+import threading
 import tkinter as tk
-from tkinter import ttk
-from tkinter import scrolledtext
-from tkinter import filedialog
-from datetime import datetime
+from tkinter import filedialog, scrolledtext, ttk
+from datetime import date, datetime
+
+from exporter import export_to_csv, format_date
 from mail_client import ImapMailClient
-from exporter import format_date, export_to_csv
+
+DEFAULT_PORT = "993"
+
+
+def default_date_range(today: date | None = None) -> tuple[date, date]:
+    """Return (first day of the current month, today) as the default search window."""
+    today = today or date.today()
+    return today.replace(day=1), today
 
 
 class EmailCounterApp:
@@ -17,6 +25,7 @@ class EmailCounterApp:
         self.main_frame = tk.Frame(window)
 
         self.emails = []
+        self.client = None
 
         self._build_login_frame()
         self._build_main_frame()
@@ -38,11 +47,16 @@ class EmailCounterApp:
         self.host_entry = tk.Entry(frame, width=30)
         self.host_entry.grid(row=2, column=1)
 
+        tk.Label(frame, text="Port:").grid(row=3, column=0, sticky="e")
+        self.port_entry = tk.Entry(frame, width=10)
+        self.port_entry.insert(0, DEFAULT_PORT)
+        self.port_entry.grid(row=3, column=1, sticky="w")
+
         self.connect_button = tk.Button(frame, text="Connect", command=self.on_connect)
-        self.connect_button.grid(row=3, column=0, columnspan=2, pady=10)
+        self.connect_button.grid(row=4, column=0, columnspan=2, pady=10)
 
         self.status_label = tk.Label(frame, text="")
-        self.status_label.grid(row=4, column=0, columnspan=2)
+        self.status_label.grid(row=5, column=0, columnspan=2)
 
     def _build_main_frame(self):
         frame = self.main_frame
@@ -51,12 +65,17 @@ class EmailCounterApp:
         self.folder_combo = ttk.Combobox(frame, state="readonly")
         self.folder_combo.grid(row=0, column=1)
 
+        default_from, default_to = default_date_range()
+        date_format = "%Y-%m-%d"
+
         tk.Label(frame, text="Date from (YYYY-MM-DD):").grid(row=1, column=0, sticky="e")
         self.date_from_entry = tk.Entry(frame, width=30)
+        self.date_from_entry.insert(0, default_from.strftime(date_format))
         self.date_from_entry.grid(row=1, column=1)
 
         tk.Label(frame, text="Date to (YYYY-MM-DD):").grid(row=2, column=0, sticky="e")
         self.date_to_entry = tk.Entry(frame, width=30)
+        self.date_to_entry.insert(0, default_to.strftime(date_format))
         self.date_to_entry.grid(row=2, column=1)
 
         self.fetch_button = tk.Button(frame, text="Fetch", command=self.on_fetch)
@@ -92,15 +111,27 @@ class EmailCounterApp:
         email_address = self.email_entry.get()
         password = self.password_entry.get()
         host = self.host_entry.get()
+        port = self.port_entry.get().strip() or DEFAULT_PORT
 
-        self.client = ImapMailClient(host)
-        try:
-            self.client.connect(email_address, password)
-        except Exception as e:
-            self.status_label.config(text=f"Error: {e}")
+        if not host or not email_address:
+            self.status_label.config(text="Email and IMAP host are required")
             return
 
-        folders = self.client.list_folders()
+        try:
+            port = int(port)
+        except ValueError:
+            self.status_label.config(text="Port must be a number")
+            return
+
+        self.client = ImapMailClient(host, port=port)
+        try:
+            self.client.connect(email_address, password)
+            folders = self.client.list_folders()
+        except Exception as e:
+            self.status_label.config(text=f"Error: {e}")
+            self.client.disconnect()
+            return
+
         self.folder_combo["values"] = folders
         if "INBOX" in folders:
             self.folder_combo.set("INBOX")
@@ -112,22 +143,56 @@ class EmailCounterApp:
 
     def on_fetch(self):
         folder = self.folder_combo.get()
+        if not folder:
+            self.result_label.config(text="Select a folder first")
+            return
 
         try:
-            date_from = datetime.strptime(self.date_from_entry.get(), "%Y-%m-%d")
-            date_to = datetime.strptime(self.date_to_entry.get(), "%Y-%m-%d")
+            date_from = datetime.strptime(self.date_from_entry.get(), "%Y-%m-%d").date()
+            date_to = datetime.strptime(self.date_to_entry.get(), "%Y-%m-%d").date()
         except ValueError:
             self.result_label.config(text="Invalid date format, use YYYY-MM-DD")
             return
 
-        self.emails = self.client.fetch_emails(folder, date_from, date_to)
-        self.result_label.config(text=f"Fetched {len(self.emails)} emails")
+        if date_from > date_to:
+            self.result_label.config(text="Date from must not be after date to")
+            return
+
+        # Run the IMAP work off the UI thread so the window stays responsive.
+        self.fetch_button.config(state="disabled")
+        self.result_label.config(text="Fetching...")
+        worker = threading.Thread(
+            target=self._fetch_worker, args=(folder, date_from, date_to), daemon=True
+        )
+        worker.start()
+
+    def _fetch_worker(self, folder, date_from, date_to):
+        try:
+            emails = self.client.fetch_emails(folder, date_from, date_to)
+            error = None
+        except Exception as exc:
+            emails = []
+            error = str(exc)
+        self.window.after(0, lambda: self._fetch_finished(emails, error))
+
+    def _fetch_finished(self, emails, error):
+        self.fetch_button.config(state="normal")
+        if error:
+            self.result_label.config(text=f"Error: {error}")
+            return
+
+        self.emails = emails
+        self.result_label.config(text=f"Fetched {len(emails)} emails")
 
         self.tree.delete(*self.tree.get_children())
-        for i, e in enumerate(self.emails, start=1):
+        for i, e in enumerate(emails, start=1):
             body_text = e["body"].replace("\n", " ").replace("\r", " ").strip()
             body_preview = body_text[:50] + ("..." if len(body_text) > 50 else "")
-            self.tree.insert("", "end", values=(i, format_date(e["date"]), e["sender"], e["subject"], body_preview))
+            self.tree.insert(
+                "",
+                "end",
+                values=(i, format_date(e["date"]), e["sender"], e["subject"], body_preview),
+            )
 
     def on_row_double_click(self, event):
         item_id = self.tree.identify_row(event.y)
@@ -160,5 +225,9 @@ class EmailCounterApp:
         if not filepath:
             return
 
-        export_to_csv(self.emails, filepath)
+        try:
+            export_to_csv(self.emails, filepath)
+        except OSError as e:
+            self.result_label.config(text=f"Export failed: {e}")
+            return
         self.result_label.config(text=f"Exported {len(self.emails)} emails to {filepath}")
