@@ -16,10 +16,12 @@ extended without touching the core logic.
 
 ## ✨ Key Features
 
-- **IMAP connectivity:** works with any mailbox that supports IMAP, not tied to a single provider.
-- **Folder & date range selection:** pick exactly which folder and time window to analyze.
-- **CSV export:** save the results (date, sender, subject) for further analysis in Excel or elsewhere.
-- **Planned:** sender-frequency analysis to help flag likely spam senders (see Roadmap).
+- **IMAP connectivity:** works with any mailbox that supports IMAP over SSL, not tied to a single provider.
+- **Folder & date range selection:** pick exactly which folder and time window to analyze (the end date is inclusive).
+- **CSV export:** save the results (date, sender, subject, body) in Excel-friendly UTF-8 with a BOM; delimiter and display time zone are configurable.
+- **Resilient IMAP client:** tolerates non-standard folder hierarchy delimiters, missing time zones in `Date` headers, and unreadable messages instead of crashing.
+- **Responsive GUI:** fetching runs in a background thread, so the window stays usable on large mailboxes.
+- **Configurable port:** connect to IMAP endpoints on non-standard ports, not just 993.
 
 ## 🛠️ Tech Info
 
@@ -41,38 +43,53 @@ extended without touching the core logic.
 
 1. Clone the repository:
 
-```
+```bash
 git clone https://github.com/atameczka/email-counter.git
+cd email-counter
 ```
 
 2. Install dependencies:
 
+```bash
+pip install -e ".[dev]"
 ```
-pip install -r requirements.txt
-```
+
+(Or, without packaging: `pip install -r requirements.txt`.)
 
 3. Run the application:
 
-```
+```bash
 python main.py
 ```
 
-No external dependencies are required — everything used is part of the Python standard library.
+After `pip install -e .` you can also launch it with the `email-counter`
+console command.
 
-## 🚧 Current Status
+## 🧪 Tests
 
-- [ ] IMAP connection logic
-- [ ] Folder listing
-- [ ] Date-range email search
-- [ ] Tkinter GUI
-- [ ] CSV export
-- [ ] Packaged release
+The test suite covers the IMAP client (parsing, date handling, error cases),
+the CSV exporter, and the GUI helper functions. GUI tests are skipped
+automatically on machines without a display or `tkinter`:
 
-This project is under active development, built incrementally commit by commit.
+```bash
+pip install -e ".[dev]"
+python -m pytest
+```
+
+## ✅ Status
+
+- [x] IMAP connection logic
+- [x] Folder listing
+- [x] Date-range email search
+- [x] Tkinter GUI
+- [x] CSV export
+- [x] Packaging (`pyproject.toml` + `email-counter` console script)
+- [x] Test suite
 
 ## 🗺️ Roadmap
 
 - Sender-frequency analysis to detect likely spam senders
+- STARTTLS support for non-SSL IMAP endpoints (port 143)
 
 ## ⚖️ License
 
