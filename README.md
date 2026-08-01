@@ -18,7 +18,7 @@ extended without touching the core logic.
 
 - **IMAP connectivity:** works with any mailbox that supports IMAP, not tied to a single provider.
 - **Folder & date range selection:** pick exactly which folder and time window to analyze.
-- **CSV export:** save the results (date, sender, subject) for further analysis in Excel or elsewhere.
+- **CSV export:** save the results (date, sender, subject, body) for further analysis in Excel or elsewhere.
 - **Planned:** sender-frequency analysis to help flag likely spam senders (see Roadmap).
 
 ## 🛠️ Tech Info
@@ -57,18 +57,18 @@ pip install -r requirements.txt
 python main.py
 ```
 
-No external dependencies are required — everything used is part of the Python standard library.
+Only one external dependency is required (`tzdata`, for time zone support on Windows) — everything else is part of the Python standard library.
 
 ## 🚧 Current Status
 
-- [ ] IMAP connection logic
-- [ ] Folder listing
-- [ ] Date-range email search
-- [ ] Tkinter GUI
-- [ ] CSV export
+- [x] IMAP connection logic
+- [x] Folder listing
+- [x] Date-range email search
+- [x] Tkinter GUI
+- [x] CSV export
 - [ ] Packaged release
 
-This project is under active development, built incrementally commit by commit.
+Core functionality is complete and working end to end.
 
 ## 🗺️ Roadmap
 
